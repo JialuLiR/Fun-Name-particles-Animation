@@ -1,0 +1,204 @@
+
+<div id="particles_7d823c6c" style="
+    width:100%;
+    max-width:1100px;
+    margin:auto;
+    background:#080c18;
+    border-radius:14px;
+    overflow:hidden;
+    font-family:Arial,sans-serif;
+">
+    <div style="display:flex;gap:8px;align-items:center;justify-content:center;padding:14px 14px 0;flex-wrap:wrap;">
+        <label style="color:#dbe7ff;font-size:13px;" for="particle-name">Name</label>
+        <input id="particle-name" type="text" maxlength="40" placeholder="Enter a name"
+            style="border:1px solid #405477;border-radius:8px;padding:8px 10px;background:#111a2b;color:white;">
+        <button data-action="share">Copy share link</button>
+        <span data-share-status style="color:#9caac5;font-size:12px;" aria-live="polite"></span>
+    </div>
+    <canvas style="display:block;width:100%;height:440px;cursor:crosshair;"></canvas>
+    <div style="display:flex;gap:10px;justify-content:center;padding:14px;flex-wrap:wrap;">
+        <button data-action="scatter">Scatter</button>
+        <button data-action="assemble">Assemble</button>
+        <button data-action="wave">Wave</button>
+        <button data-action="explode">Explode</button>
+    </div>
+    <p style="color:#9caac5;text-align:center;font-size:12px;padding-bottom:12px;">
+        Move your mouse · Click to explode · Try different modes
+    </p>
+</div>
+
+<script>
+(function() {
+    const root = document.getElementById("particles_7d823c6c");
+    const canvas = root.querySelector("canvas");
+    const ctx = canvas.getContext("2d");
+    const buttons = root.querySelectorAll("button[data-action]");
+    const nameInput = root.querySelector("#particle-name");
+    const shareStatus = root.querySelector("[data-share-status]");
+
+    const params = new URLSearchParams(window.location.search);
+    const text = params.get("name")?.trim().slice(0, 40) || "Mengjing Xu";
+    const color = "#9bc5ff";
+    nameInput.value = text;
+
+    let W, H, particles = [];
+    let mouse = {x:-1000,y:-1000};
+    let mode = "assemble";
+    let tick = 0;
+
+    function resize() {
+        W = canvas.clientWidth;
+        H = 440;
+        canvas.width = W * devicePixelRatio;
+        canvas.height = H * devicePixelRatio;
+        ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
+        createParticles();
+    }
+
+    function createParticles() {
+        particles = [];
+
+        const off = document.createElement("canvas");
+        off.width = W;
+        off.height = H;
+        const oc = off.getContext("2d");
+
+        const fontSize = Math.min(125, W * 0.17);
+        oc.fillStyle = "white";
+        oc.font = "bold " + fontSize + "px Arial";
+        oc.textAlign = "center";
+        oc.textBaseline = "middle";
+        oc.fillText(text, W/2, H/2);
+
+        const pixels = oc.getImageData(0,0,W,H).data;
+        const gap = 4;
+
+        for(let y=0;y<H;y+=gap) {
+            for(let x=0;x<W;x+=gap) {
+                const alpha = pixels[(y*W+x)*4+3];
+                if(alpha>128) {
+                    particles.push({
+                        x:Math.random()*W,
+                        y:Math.random()*H,
+                        tx:x,
+                        ty:y,
+                        vx:0,
+                        vy:0,
+                        size:Math.random()*1.2+0.6,
+                        phase:Math.random()*Math.PI*2
+                    });
+                }
+            }
+        }
+    }
+
+    function explode(cx,cy,strength=14) {
+        for(const p of particles) {
+            const dx=p.x-cx;
+            const dy=p.y-cy;
+            const d=Math.hypot(dx,dy)||1;
+            const force=Math.max(0,1-d/400)*strength;
+            p.vx+=dx/d*force*(0.5+Math.random());
+            p.vy+=dy/d*force*(0.5+Math.random());
+        }
+    }
+
+    function animate() {
+        tick+=0.016;
+        ctx.fillStyle="#080c18";
+        ctx.fillRect(0,0,W,H);
+
+        for(const p of particles) {
+            let tx=p.tx;
+            let ty=p.ty;
+
+            if(mode==="wave") {
+                ty+=Math.sin(tick*3+p.tx*0.025)*25;
+                tx+=Math.cos(tick*2+p.ty*0.025)*5;
+            }
+
+            const ax=(tx-p.x)*0.022;
+            const ay=(ty-p.y)*0.022;
+
+            p.vx=(p.vx+ax)*0.89;
+            p.vy=(p.vy+ay)*0.89;
+
+            const dx=p.x-mouse.x;
+            const dy=p.y-mouse.y;
+            const dist=Math.hypot(dx,dy);
+
+            if(dist<110 && dist>0) {
+                const force=(110-dist)/110*3;
+                p.vx+=dx/dist*force;
+                p.vy+=dy/dist*force;
+            }
+
+            p.x+=p.vx;
+            p.y+=p.vy;
+
+            ctx.beginPath();
+            ctx.arc(p.x,p.y,p.size,0,Math.PI*2);
+            ctx.fillStyle=color;
+            ctx.fill();
+        }
+
+        requestAnimationFrame(animate);
+    }
+
+    canvas.addEventListener("pointermove", e=>{
+        const r=canvas.getBoundingClientRect();
+        mouse.x=e.clientX-r.left;
+        mouse.y=e.clientY-r.top;
+    });
+
+    canvas.addEventListener("pointerleave", ()=>{
+        mouse.x=-1000;
+        mouse.y=-1000;
+    });
+
+    canvas.addEventListener("click", e=>{
+        const r=canvas.getBoundingClientRect();
+        explode(e.clientX-r.left,e.clientY-r.top,22);
+    });
+
+    buttons.forEach(b=>{
+        b.style.cssText=`
+            background:#1c2943;color:white;
+            border:1px solid #405477;
+            border-radius:8px;padding:9px 18px;
+            cursor:pointer;font-size:13px;
+        `;
+
+        b.onclick=()=>{
+            const action=b.dataset.action;
+
+            if(action==="share") {
+                const name = nameInput.value.trim().slice(0, 40) || "Your name";
+                const url = new URL(window.location.href);
+                url.searchParams.set("name", name);
+                navigator.clipboard.writeText(url.href).then(()=>{
+                    shareStatus.textContent = "Link copied!";
+                }).catch(()=>{
+                    shareStatus.textContent = "Copy failed; copy the URL from your browser.";
+                });
+            } else if(action==="explode") {
+                explode(W/2,H/2,30);
+            } else if(action==="scatter") {
+                for(const p of particles) {
+                    p.x=Math.random()*W;
+                    p.y=Math.random()*H;
+                    p.vx=0;
+                    p.vy=0;
+                }
+                mode="assemble";
+            } else {
+                mode=action;
+            }
+        };
+    });
+
+    resize();
+    animate();
+    window.addEventListener("resize",resize);
+})();
+</script>
